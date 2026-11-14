@@ -224,6 +224,53 @@ function updateMeteor(dt){
     m.renderOrder = 2; scene.add(m); twinkle.push(m);
   }
 
+
+  /* V8.2: layered cobalt / pale-blue brush ribbons follow the central sky current.
+     They stay on the inner dome; particle strokes continue flowing in front. */
+  function ribbonSky(tracks,colour,opacity){
+    const verts=[], cs=[], paint=C(colour), rr=R*0.991;
+    function vertex(a,e){const p=[0,0,0];dome(a,e,rr,p);verts.push(p[0],p[1],p[2]);cs.push(paint.r,paint.g,paint.b);}
+    for(const tr of tracks){
+      for(let i=0;i<tr.length-1;i++){
+        const p=tr[i],q=tr[i+1],da=q[0]-p[0],de=q[1]-p[1];
+        const n=Math.hypot(da,de)||1,wide=(p[2]||1)/R;
+        const ax=-de/n*wide,ey=da/n*wide;
+        vertex(p[0]+ax,p[1]+ey);vertex(p[0]-ax,p[1]-ey);vertex(q[0]+ax,q[1]+ey);
+        vertex(p[0]-ax,p[1]-ey);vertex(q[0]-ax,q[1]-ey);vertex(q[0]+ax,q[1]+ey);
+      }
+    }
+    const g=new THREE.BufferGeometry();
+    g.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+    g.setAttribute('color',new THREE.Float32BufferAttribute(cs,3));
+    const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({
+      vertexColors:true,transparent:true,opacity,side:THREE.DoubleSide,
+      depthWrite:false,fog:false
+    }));
+    m.frustumCulled=false;m.renderOrder=.6;scene.add(m);
+  }
+  const spiralColours=['#679dc3','#a3c5ce','#3468a7','#d2d5b1','#4a83b9','#1a498b'];
+  for(let band=0;band<15;band++){
+    const tr=[],start=band*.29;
+    for(let i=0;i<=52;i++){
+      const u=i/52,th=u*Math.PI*3.8+start;
+      const radius=.31*(1-u)+.035;
+      const a=P+.22+Math.cos(th)*radius;
+      const el=.47+Math.sin(th)*radius*.74+.008*Math.sin(th*3+band);
+      tr.push([a,el,.38+band%4*.14]);
+    }
+    ribbonSky([tr],spiralColours[band%spiralColours.length],.44);
+  }
+  // An elongated curving current ties the spiral to the moon, as in the painting.
+  for(let band=0;band<9;band++){
+    const tr=[];
+    for(let i=0;i<=64;i++){
+      const u=i/64;
+      tr.push([P+.64-u*1.05,.42+.065*Math.sin(u*6.2+band*.18)+band*.008,
+        .42+(band%3)*.16]);
+    }
+    ribbonSky([tr],spiralColours[(band+2)%spiralColours.length],.28);
+  }
+
   /* ---------- 漩涡天空：笔触沿穹顶上的流场移动 ---------- */
   const N = small ? 10500 : 20500;
   let activeN=N;
