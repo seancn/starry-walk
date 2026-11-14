@@ -457,10 +457,10 @@ function updateMeteor(dt){
       const len=.25+Math.random()*1.12,shade=Math.floor(Math.random()*ridgeMats.length);
       if(side<2){
         const px=x+(Math.random()-.5)*(w-.6);
-        ridgeAt(px,top,z+(side===0?d/2+.01:-d/2-.01),len,side===0?0:Math.PI,tilt,shade);
+        ridgeAt(px,top,z+(side===0?d/2+.085:-d/2-.085),len,side===0?0:Math.PI,tilt,shade);
       }else{
         const pz=z+(Math.random()-.5)*(d-.6);
-        ridgeAt(x+(side===2?w/2+.01:-w/2-.01),top,pz,len,side===2?Math.PI/2:-Math.PI/2,tilt,shade);
+        ridgeAt(x+(side===2?w/2+.085:-w/2-.085),top,pz,len,side===2?Math.PI/2:-Math.PI/2,tilt,shade);
       }
     }
   }
@@ -539,9 +539,10 @@ function updateMeteor(dt){
       const tri=(a,b,c)=>{
         for(const p of [a,b,c]){v.push(p[0],p[1],p[2]);uv.push(.5+p[0]/w,.5+p[2]/d);}
       };
-      tri(A,B,G);tri(A,G,F);
-      tri(D,C,F);tri(D,F,G);
-      tri(A,F,C);tri(B,D,G);
+      // Outward-facing winding keeps both pitched surfaces visible with FrontSide materials.
+      tri(A,G,B);tri(A,F,G);
+      tri(D,F,C);tri(D,G,F);
+      tri(A,C,F);tri(B,G,D);
       const roof=new THREE.BufferGeometry();
       roof.setAttribute('position',new THREE.Float32BufferAttribute(v,3));
       roof.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
