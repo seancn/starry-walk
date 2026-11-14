@@ -69,7 +69,9 @@ function init() {
   const small = innerWidth < 700;
 
   const renderer = new THREE.WebGLRenderer({ antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, small ? 1.35 : 2));
+  let highQuality=true;
+  const configurePixelRatio=()=>renderer.setPixelRatio(Math.min(devicePixelRatio,small?(highQuality?1.75:1.1):(highQuality?2:1.35)));
+  configurePixelRatio();
   renderer.setSize(innerWidth, innerHeight);
   document.body.prepend(renderer.domElement);
 
@@ -198,7 +200,7 @@ function updateMeteor(dt){
   const moonSp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(true), transparent: true, depthWrite: false, fog: false }));
   dome(moon[0], moon[1], R * 0.96, tmp); moonSp.position.set(tmp[0], tmp[1], tmp[2]); moonSp.userData.b = moon[2] * 3.3; moonSp.renderOrder = 3; scene.add(moonSp);
   sprites.push(moonSp);
-  const moonLight = new THREE.DirectionalLight(0xffe2a0, 0.55);
+  const moonLight = new THREE.DirectionalLight(0xffe2a0, 0.76);
   moonLight.position.set(tmp[0] - CX, tmp[1], tmp[2] - CZ); scene.add(moonLight);
 
   // 满天细小星点（两组交替闪烁）
@@ -212,8 +214,19 @@ function updateMeteor(dt){
   }
 
   /* ---------- 漩涡天空：笔触沿穹顶上的流场移动 ---------- */
-  const N = small ? 6000 : 14000;
+  const N = small ? 10500 : 20500;
+  let activeN=N;
   const sky = strokes(N); sky.mesh.renderOrder = 1; scene.add(sky.mesh);
+  const qualityButton=document.getElementById('quality');
+  qualityButton.addEventListener('click',()=>{
+    highQuality=!highQuality;
+    activeN=highQuality?N:Math.floor(N*.58);
+    sky.g.setDrawRange(0,activeN);
+    qualityButton.setAttribute('aria-pressed',String(highQuality));
+    qualityButton.textContent=highQuality?'✦':'☆';
+    qualityButton.title=highQuality?'高画质':'省电画质';
+    configurePixelRatio();resize();touched();
+  });
   const AZ = new Float32Array(N), EL = new Float32Array(N), base = new Float32Array(N * 3), warm = new Float32Array(N * 3), life = new Float32Array(N);
   const blues = ['#1b3a8a', '#24489c', '#2f5fb3', '#3f74c4', '#5d8fd6', '#86b3e3', '#a9cfe9', '#d9e8ee', '#2a7f9e'].map(C);
   const yellows = ['#f6e27a', '#fff3c4', '#e8c24c', '#f2d36a'].map(C);
@@ -221,6 +234,7 @@ function updateMeteor(dt){
   const vort = [[P - 0.12, 0.4, 26, 1.25], [P + 0.1, 0.3, 17, -1.0], [P - 1.9, 0.45, 22, 1.0], [P + 2.1, 0.5, 20, -0.9], [0.1, 0.9, 24, 0.8]]
     .concat(stars.map(s => [s[0], s[1], s[2] * 1.5, 0.75]), [[moon[0], moon[1], 12, 0.6]]);
   const glow = stars.map(s => [s[0], s[1], s[2]]).concat([[moon[0], moon[1], 11]]);
+  const vortexPulse=new Float32Array(vort.length);
   const sinMin = Math.sin(0.05), sinMax = Math.sin(1.5);
   function spawn(i) {
     AZ[i] = Math.random() * TAU; EL[i] = Math.asin(rnd(sinMin, sinMax));
@@ -233,13 +247,14 @@ function updateMeteor(dt){
   const wrap = a => a - TAU * Math.round(a / TAU);
   function stepSky(dt, t, spd) {
     const Pp = sky.pos, D = sky.dir;
-    for (let i = 0; i < N; i++) {
+    for(let k=0;k<vort.length;k++)vortexPulse[k]=1+.15*Math.sin(t*.32+k*.79);
+    for (let i = 0; i < activeN; i++) {
       const az = AZ[i], el = EL[i], ce = Math.cos(el), Y = el * R;
       let vx = 2.2 + 0.7 * Math.sin(Y * 0.06 + t * 0.2), vy = 1.1 * Math.sin(az * 6 + Y * 0.03 + t * 0.15) * (1 - el / 1.6);
       for (let k = 0; k < vort.length; k++) {
-        const o = vort[k], dy = (el - o[1]) * R; if (dy > o[2] * 3 || dy < -o[2] * 3) continue;
-        const dx = wrap(az - o[0]) * R * Math.cos((el + o[1]) / 2); if (dx > o[2] * 3 || dx < -o[2] * 3) continue;
-        const f = o[3] * Math.exp(-(dx * dx + dy * dy) / (o[2] * o[2] * 2.2)) * 8 / o[2];
+        const o = vort[k], radius=o[2]*vortexPulse[k], dy = (el - o[1]) * R; if (dy > radius * 3 || dy < -radius * 3) continue;
+        const dx = wrap(az - o[0]) * R * Math.cos((el + o[1]) / 2); if (dx > radius * 3 || dx < -radius * 3) continue;
+        const f = o[3] * Math.exp(-(dx * dx + dy * dy) / (radius * radius * 2.2)) * 8 / radius;
         vx += (-dy - dx * 0.12) * f; vy += (dx - dy * 0.12) * f;
       }
       let w = 0;
@@ -584,6 +599,7 @@ function updateMeteor(dt){
     sprites.forEach((sp, i) => sp.scale.setScalar(sp.userData.b * (1 + 0.07 * Math.sin(t * 1.6 + i * 1.3))));
     lit.forEach(g => g.material.opacity = 0.42 + 0.12 * Math.sin(t * 2.3 + g.userData.p));
     cyp.rotation.z = 0.018 * Math.sin(t * 0.6);
+    moonLight.intensity=.68+.08*Math.sin(t*.35);
     for(const mote of motes){
       const d=mote.userData;
       mote.position.set(d.x+Math.sin(t*d.speed+d.phase)*.38,d.y+Math.sin(t*d.speed*1.4+d.phase)*.3,d.z+Math.cos(t*d.speed+d.phase)*.38);
