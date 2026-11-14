@@ -32,6 +32,10 @@ button:focus-visible{outline:2px solid #f6e27a;outline-offset:2px}
 #quality[aria-pressed="false"]{opacity:.56}
 #paintingNote{position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translateX(-50%);border-radius:100px;background:#0d2447bd;padding:8px 14px;font-size:12px;pointer-events:none;white-space:nowrap;display:none}
 #paintingNote.show{display:block}
+.hud,#joy,#view,.keys{transition:opacity .65s ease}
+body.painting .hud,body.painting #joy,body.painting #view,body.painting .keys{opacity:0;pointer-events:none}
+body.painting #paintingNote{bottom:max(24px,env(safe-area-inset-bottom))}
+
 @media(max-width:430px){.btns{gap:5px}button{width:40px;height:40px}}
 @media(max-width:430px){h1{font-size:21px}.sub{font-size:11px}.btns{gap:6px}}
 @media(pointer:coarse){.keys{display:none}}
@@ -579,6 +583,7 @@ function updateMeteor(dt){
     paintingButton.textContent=paintingMode?'走':'画';
     paintingButton.setAttribute('aria-label',paintingMode?'返回自由漫游':'进入原画视角');
     paintingNote.classList.toggle('show',paintingMode);
+    document.body.classList.toggle('painting',paintingMode);
     if(paintingMode){
       firstPerson=false;
       viewButton.textContent='👁';
