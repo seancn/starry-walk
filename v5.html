@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
-<title>星夜漫游 V5 · 流动油画</title>
+<title>星夜漫游 V5.1 · 星河流光</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
 <style>
@@ -32,7 +32,7 @@ button:focus-visible{outline:2px solid #f6e27a;outline-offset:2px}
 </style>
 </head>
 <body>
-<div class="hud"><h1>星夜漫游 · V5</h1><div class="sub">文森特·梵高，1889 年 · 立体笔触再现</div></div>
+<div class="hud"><h1>星夜漫游 · V5.1</h1><div class="sub">文森特·梵高，1889 年 · 立体笔触再现</div></div>
 <div class="btns">
   <button id="wind" aria-label="暂停或继续风的流动" title="暂停/继续流动">❚❚</button>
   <button id="reset" aria-label="回到初始视角" title="回到初始视角">⟲</button>
@@ -163,6 +163,22 @@ function init() {
     return new THREE.CanvasTexture(c);
   }
   const starTex = haloTex(false), tmp = [0, 0, 0];
+// Shooting stars: short-lived streaks painted across the distant sky.
+const meteorGroup = new THREE.Group(); scene.add(meteorGroup);
+const meteorMat = new THREE.MeshBasicMaterial({color:0xffe6a2,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,fog:false,blending:THREE.AdditiveBlending});
+const meteor = new THREE.Mesh(new THREE.PlaneGeometry(12,.16),meteorMat); meteorGroup.add(meteor);
+let meteorAge=999, meteorDelay=7, meteorAz=Math.PI, meteorEl=.7;
+function updateMeteor(dt){
+  meteorDelay-=dt;
+  if(meteorDelay<=0){meteorDelay=9+Math.random()*13;meteorAge=0;meteorAz=Math.PI-1+Math.random()*2;meteorEl=.55+Math.random()*.42}
+  if(meteorAge<1.15){
+    meteorAge+=dt;const a=meteorAz+meteorAge*.21,e=meteorEl-meteorAge*.11;
+    dome(a,e,R*.93,tmp);meteor.position.set(tmp[0],tmp[1],tmp[2]);
+    meteor.lookAt(CX,0,CZ);meteor.rotateZ(-.45);
+    meteorMat.opacity=Math.sin(Math.PI*Math.min(1,meteorAge/1.15))*.82;
+    meteor.scale.set(1+meteorAge*1.6,1,1);
+  }else meteorMat.opacity=0;
+}
   const sprites = stars.map(s => {
     const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
     dome(s[0], s[1], R * 0.97, tmp); sp.position.set(tmp[0], tmp[1], tmp[2]); sp.userData.b = s[2] * 3.6; sp.renderOrder = 3; scene.add(sp); return sp;
@@ -430,18 +446,21 @@ function init() {
   addEventListener('resize', resize); resize();
 
   const clock = new THREE.Clock(); let t = 0;
+  const gaze = new THREE.Vector3();
   stepSky(0, 0, 0);
   renderer.setAnimationLoop(() => {
     const dt = Math.min(clock.getDelta(), 0.05), s = paused ? 0 : spd; t += dt * s;
     stepSky(dt, t, s);
+    updateMeteor(dt*s);
     walk(dt);
     tgt.set(hero.position.x, hero.position.y + 1.35, hero.position.z);
-    cur.yaw += (goal.yaw - cur.yaw) * 0.08; cur.pitch += (goal.pitch - cur.pitch) * 0.08; cur.rad += (goal.rad - cur.rad) * 0.08;
+    const ease = 1-Math.exp(-dt*5.0);
+    cur.yaw += (goal.yaw - cur.yaw) * ease; cur.pitch += (goal.pitch - cur.pitch) * ease; cur.rad += (goal.rad - cur.rad) * ease;
     const cp = 1;
     camera.position.set(tgt.x + cur.rad * Math.sin(cur.yaw) * cp, tgt.y + 2.7, tgt.z + cur.rad * Math.cos(cur.yaw) * cp);
     const gh = hH(camera.position.x, camera.position.z) + 0.6;
     if (camera.position.y < gh) camera.position.y = gh;
-    const gaze = tgt.clone().add(new THREE.Vector3(-Math.sin(cur.yaw) * 30, Math.tan(cur.pitch) * 30 + 1.3, -Math.cos(cur.yaw) * 30));
+    gaze.set(tgt.x-Math.sin(cur.yaw)*30, tgt.y+Math.tan(cur.pitch)*30+1.3, tgt.z-Math.cos(cur.yaw)*30);
     camera.lookAt(gaze);
     sprites.forEach((sp, i) => sp.scale.setScalar(sp.userData.b * (1 + 0.07 * Math.sin(t * 1.6 + i * 1.3))));
     lit.forEach(g => g.material.opacity = 0.42 + 0.12 * Math.sin(t * 2.3 + g.userData.p));
