@@ -1,0 +1,590 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>星夜漫游 V7 · 油画中的夜行</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;700&display=swap" rel="stylesheet">
+<style>
+/* VOICE: 安静、夜色、像走进一幅油画
+   IDEA: 1889 年的《星月夜》被拆成一层层可以绕着走的笔触
+   PICTURE: 全屏 3D：流动的漩涡天空、光晕星辰、月亮、柏树、村庄、山丘
+   COLOUR and TYPE: 群青夜空 + 铬黄星光 + 柏树墨绿；Noto Serif SC
+   LAYOUT: 画面占满屏幕，标题左上、按钮右上、提示底部居中 */
+html,body{margin:0;height:100%;background:#0b1a45;overflow:hidden;color:#f6e7a8;font:15px/1.4 "Noto Serif SC","Songti SC",serif;-webkit-user-select:none;user-select:none}
+canvas{display:block;position:fixed;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+canvas:active{cursor:grabbing}
+.hud{position:fixed;left:max(16px,env(safe-area-inset-left));top:max(14px,env(safe-area-inset-top));pointer-events:none;text-shadow:0 2px 14px #000c}
+h1{margin:0;font-size:24px;font-weight:700;letter-spacing:.06em}
+.sub{margin-top:2px;font-size:13px;opacity:.78}
+.btns{position:fixed;right:max(12px,env(safe-area-inset-right));top:max(12px,env(safe-area-inset-top));display:flex;gap:10px}
+button{width:44px;height:44px;border-radius:50%;border:1px solid #f6e7a866;background:#0b1a40b8;color:#f6e7a8;font:600 17px/1 system-ui,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+button:focus-visible{outline:2px solid #f6e27a;outline-offset:2px}
+.hint{position:fixed;left:50%;top:calc(max(14px,env(safe-area-inset-top)) + 62px);transform:translateX(-50%);padding:9px 16px;border-radius:999px;background:#0b1a40cc;font-size:13px;white-space:nowrap;pointer-events:none;transition:opacity 1.2s}
+.hint.off{opacity:0}
+#joy{position:fixed;left:max(22px,env(safe-area-inset-left));bottom:max(26px,env(safe-area-inset-bottom));width:124px;height:124px;border-radius:50%;background:radial-gradient(circle,#0b1a4066 0,#0b1a40b8 70%);border:1px solid #f6e7a855;touch-action:none;-webkit-backdrop-filter:blur(4px);backdrop-filter:blur(4px)}
+#knob{position:absolute;left:50%;top:50%;width:52px;height:52px;margin:-26px;border-radius:50%;background:radial-gradient(circle at 40% 35%,#fff3c4,#e8c24c 60%,#b8892a);box-shadow:0 0 18px #f6e27a88;pointer-events:none}
+.keys{position:fixed;right:max(16px,env(safe-area-inset-right));bottom:max(83px,env(safe-area-inset-bottom));font-size:12px;opacity:.6;pointer-events:none}
+#view{position:fixed;right:max(18px,env(safe-area-inset-right));bottom:max(26px,env(safe-area-inset-bottom));z-index:3}
+#view:active{transform:scale(.94)}
+@media(max-width:430px){h1{font-size:21px}.sub{font-size:11px}.btns{gap:6px}}
+@media(pointer:coarse){.keys{display:none}}
+#err{position:fixed;inset:0;display:grid;place-items:center;padding:24px;text-align:center;font-size:16px}
+#err[hidden]{display:none}
+</style>
+</head>
+<body>
+<div class="hud"><h1>星夜漫游 · V7</h1><div class="sub">文森特·梵高，1889 年 · 立体笔触再现</div></div>
+<div class="btns">
+  <button id="wind" aria-label="暂停或继续风的流动" title="暂停/继续流动">❚❚</button>
+  <button id="reset" aria-label="回到初始视角" title="回到初始视角">⟲</button>
+</div>
+<button id="view" aria-label="切换第一人称漫游" title="切换第一/第三人称">👁</button>
+<div class="hint" id="hint">摇杆行走 · 上滑仰望星空 · 右下角切换第一人称</div>
+<div id="joy" aria-label="移动摇杆"><div id="knob"></div></div>
+<div class="keys">WASD / 方向键走动 · Shift 快走</div>
+<div id="err" hidden>你的浏览器不支持 WebGL，无法显示 3D 场景。</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+{
+const err = document.getElementById('err');
+if (!window.THREE) { err.hidden = false; }
+else { try { init(); } catch (e) { err.hidden = false; err.textContent = '无法启动 3D 场景：' + e.message; } }
+
+function init() {
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const pick = a => a[(Math.random() * a.length) | 0];
+  const C = h => new THREE.Color(h);
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const small = innerWidth < 700;
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(devicePixelRatio, small ? 1.35 : 2));
+  renderer.setSize(innerWidth, innerHeight);
+  document.body.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  scene.background = C('#0b1a45');
+  scene.fog = new THREE.Fog(0x24467e, 80, 280);
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 700);
+
+  scene.add(new THREE.HemisphereLight(0x7f9fe0, 0x0a1430, 1.15));
+
+  /* ---------- 笔触着色器：每个点是一条带方向的油画笔触，方向在屏幕上实时投影 ---------- */
+  const strokeMat = new THREE.ShaderMaterial({
+    uniforms: { uScale: { value: 1 }, uAspect: { value: 1 } },
+    transparent: true, depthWrite: false,
+    vertexShader: `
+      uniform float uScale; uniform float uAspect;
+      attribute float size; attribute vec3 dir; attribute vec3 col;
+      varying vec3 vC; varying float vA; varying float vF;
+      void main(){
+        vC = col;
+        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vec4 a = projectionMatrix * mv;
+        vec4 b = projectionMatrix * modelViewMatrix * vec4(position + dir, 1.0);
+        vec2 d = b.xy / b.w - a.xy / a.w; d.x *= uAspect;
+        vA = atan(d.y, d.x);
+        vF = smoothstep(2.5, 9.0, -mv.z);
+        gl_PointSize = min(size * uScale / -mv.z, 140.0);
+        gl_Position = a;
+      }`,
+    fragmentShader: `
+      varying vec3 vC; varying float vA; varying float vF;
+      void main(){
+        if (vF < 0.01) discard;
+        vec2 p = gl_PointCoord - 0.5; p.y = -p.y;
+        float c = cos(vA), s = sin(vA);
+        vec2 q = vec2(c*p.x + s*p.y, -s*p.x + c*p.y);
+        float e = q.x*q.x/0.23 + q.y*q.y/0.012;
+        if (e > 1.0) discard;
+        float a = smoothstep(1.0, 0.55, e);
+        float streak = 0.82 + 0.18 * sin(q.y * 70.0 + q.x * 9.0);
+        gl_FragColor = vec4(vC * streak, a * 0.95 * vF);
+      }`
+  });
+  function strokes(n) {
+    const g = new THREE.BufferGeometry();
+    const o = { g, pos: new Float32Array(n * 3), col: new Float32Array(n * 3), size: new Float32Array(n), dir: new Float32Array(n * 3) };
+    g.setAttribute('position', new THREE.BufferAttribute(o.pos, 3));
+    g.setAttribute('col', new THREE.BufferAttribute(o.col, 3));
+    g.setAttribute('size', new THREE.BufferAttribute(o.size, 1));
+    g.setAttribute('dir', new THREE.BufferAttribute(o.dir, 3));
+    o.mesh = new THREE.Points(g, strokeMat); o.mesh.frustumCulled = false;
+    return o;
+  }
+
+  /* ---------- 地形：近处起伏的山丘，远处一圈群山 ---------- */
+  const CX = 8, CZ = 4;
+  const hH = (x, z) => {
+    let h = 2.2 * Math.sin(x * 0.045 + 1) + 1.4 * Math.sin(x * 0.11 + z * 0.08) + 0.8 * Math.sin(z * 0.15);
+    if (z < -18) h += (-z - 18) * 0.45 * (0.65 + 0.35 * Math.sin(x * 0.035 + 2));
+    const dx = x - CX, dz = z - CZ, d = Math.hypot(dx, dz);
+    if (d > 80) { const a = Math.atan2(dz, dx); h += (d - 80) * 0.42 * (0.6 + 0.3 * Math.sin(a * 5 + 1) + 0.12 * Math.sin(a * 13)); }
+    return h - 2;
+  };
+
+  /* ---------- 天空穹顶底色 ---------- */
+  {
+    const g = new THREE.SphereGeometry(300, 48, 24);
+    const p = g.attributes.position, cs = [], top = C('#071237'), hor = C('#24467e'), low = C('#0d1d48');
+    for (let i = 0; i < p.count; i++) {
+      const y = p.getY(i) / 300;
+      const c = y > 0 ? hor.clone().lerp(top, Math.pow(y, 0.55)) : hor.clone().lerp(low, Math.min(-y * 4, 1));
+      cs.push(c.r, c.g, c.b);
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false }));
+    m.position.set(CX, 0, CZ); m.renderOrder = -1; scene.add(m);
+  }
+
+  /* ---------- 穹顶坐标：方位角 az（π 指向村庄后方），仰角 el ---------- */
+  const R = 165, FL = 0.82, TAU = Math.PI * 2;
+  const dome = (az, el, r, out) => { const ce = Math.cos(el); out[0] = CX + r * ce * Math.sin(az); out[1] = r * Math.sin(el) * FL; out[2] = CZ + r * ce * Math.cos(az); return out; };
+  const srand = (s => () => (s = (s * 16807) % 2147483647) / 2147483647)(11);
+  const P = Math.PI;
+
+  /* ---------- 星星与月亮（正前方是原画的构图，四周与头顶也布满星） ---------- */
+  const stars = [[P - 0.75, 0.52, 7], [P - 0.5, 0.68, 6], [P - 0.28, 0.46, 6.5], [P + 0.02, 0.66, 5], [P + 0.25, 0.52, 7.5], [P + 0.42, 0.74, 5],
+    [P - 0.62, 0.28, 5.5], [P + 0.33, 0.27, 4.8], [P - 0.4, 0.2, 4.5], [P - 1.0, 0.36, 5.5]];
+  for (let i = 0; i < 18; i++) stars.push([P + 1.15 + srand() * (TAU - 2.3), 0.18 + srand() * 1.1, 4 + srand() * 3]);
+  for (let i = 0; i < 4; i++) stars.push([srand() * TAU, 1.15 + srand() * 0.3, 4.5 + srand() * 2]);
+  const moon = [P + 0.78, 0.5, 13];
+  function haloTex(moonMode) {
+    const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    if (moonMode) { gr.addColorStop(0, 'rgba(255,214,90,1)'); gr.addColorStop(.32, 'rgba(244,190,70,.95)'); gr.addColorStop(.42, 'rgba(240,210,110,.55)'); gr.addColorStop(1, 'rgba(120,170,220,0)'); }
+    else { gr.addColorStop(0, 'rgba(255,255,240,1)'); gr.addColorStop(.1, 'rgba(255,240,150,1)'); gr.addColorStop(.28, 'rgba(240,210,100,.5)'); gr.addColorStop(1, 'rgba(120,170,220,0)'); }
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    for (const r of [60, 82, 104]) { g.beginPath(); g.arc(128, 128, r, 0, 7); g.lineWidth = 8; g.strokeStyle = moonMode ? '#f5d77a' : '#cfe6f0'; g.globalAlpha = .42 - r / 360; g.stroke(); }
+    g.globalAlpha = 1;
+    if (moonMode) {
+      g.fillStyle = '#ffe27a'; g.beginPath(); g.arc(128, 128, 40, 0, 7); g.fill();
+      g.fillStyle = '#e39a35'; g.beginPath(); g.arc(146, 116, 36, 0, 7); g.fill();
+    }
+    return new THREE.CanvasTexture(c);
+  }
+  const starTex = haloTex(false), tmp = [0, 0, 0];
+// Shooting stars: short-lived streaks painted across the distant sky.
+const meteorGroup = new THREE.Group(); scene.add(meteorGroup);
+const meteorMat = new THREE.MeshBasicMaterial({color:0xffe6a2,transparent:true,opacity:0,side:THREE.DoubleSide,depthWrite:false,fog:false,blending:THREE.AdditiveBlending});
+const meteor = new THREE.Mesh(new THREE.PlaneGeometry(12,.16),meteorMat); meteorGroup.add(meteor);
+let meteorAge=999, meteorDelay=7, meteorAz=Math.PI, meteorEl=.7;
+function updateMeteor(dt){
+  meteorDelay-=dt;
+  if(meteorDelay<=0){meteorDelay=9+Math.random()*13;meteorAge=0;meteorAz=Math.PI-1+Math.random()*2;meteorEl=.55+Math.random()*.42}
+  if(meteorAge<1.15){
+    meteorAge+=dt;const a=meteorAz+meteorAge*.21,e=meteorEl-meteorAge*.11;
+    dome(a,e,R*.93,tmp);meteor.position.set(tmp[0],tmp[1],tmp[2]);
+    meteor.lookAt(CX,0,CZ);meteor.rotateZ(-.45);
+    meteorMat.opacity=Math.sin(Math.PI*Math.min(1,meteorAge/1.15))*.82;
+    meteor.scale.set(1+meteorAge*1.6,1,1);
+  }else meteorMat.opacity=0;
+}
+  const sprites = stars.map(s => {
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+    dome(s[0], s[1], R * 0.97, tmp); sp.position.set(tmp[0], tmp[1], tmp[2]); sp.userData.b = s[2] * 3.6; sp.renderOrder = 3; scene.add(sp); return sp;
+  });
+  const moonSp = new THREE.Sprite(new THREE.SpriteMaterial({ map: haloTex(true), transparent: true, depthWrite: false, fog: false }));
+  dome(moon[0], moon[1], R * 0.96, tmp); moonSp.position.set(tmp[0], tmp[1], tmp[2]); moonSp.userData.b = moon[2] * 3.3; moonSp.renderOrder = 3; scene.add(moonSp);
+  sprites.push(moonSp);
+  const moonLight = new THREE.DirectionalLight(0xffe2a0, 0.55);
+  moonLight.position.set(tmp[0] - CX, tmp[1], tmp[2] - CZ); scene.add(moonLight);
+
+  // 满天细小星点（两组交替闪烁）
+  const twinkle = [];
+  for (let k = 0; k < 2; k++) {
+    const n = small ? 500 : 900, a = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) { dome(Math.random() * TAU, Math.asin(rnd(Math.sin(0.08), 0.999)), R * 0.985, tmp); a.set(tmp, i * 3); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(a, 3));
+    const m = new THREE.Points(g, new THREE.PointsMaterial({ color: k ? 0xfff1b8 : 0xe8f4ff, size: small ? 2.6 : 2.2, sizeAttenuation: false, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false }));
+    m.renderOrder = 2; scene.add(m); twinkle.push(m);
+  }
+
+  /* ---------- 漩涡天空：笔触沿穹顶上的流场移动 ---------- */
+  const N = small ? 6000 : 14000;
+  const sky = strokes(N); sky.mesh.renderOrder = 1; scene.add(sky.mesh);
+  const AZ = new Float32Array(N), EL = new Float32Array(N), base = new Float32Array(N * 3), warm = new Float32Array(N * 3), life = new Float32Array(N);
+  const blues = ['#1b3a8a', '#24489c', '#2f5fb3', '#3f74c4', '#5d8fd6', '#86b3e3', '#a9cfe9', '#d9e8ee', '#2a7f9e'].map(C);
+  const yellows = ['#f6e27a', '#fff3c4', '#e8c24c', '#f2d36a'].map(C);
+  // [方位角, 仰角, 半径(弧长), 强度]
+  const vort = [[P - 0.12, 0.4, 26, 1.25], [P + 0.1, 0.3, 17, -1.0], [P - 1.9, 0.45, 22, 1.0], [P + 2.1, 0.5, 20, -0.9], [0.1, 0.9, 24, 0.8]]
+    .concat(stars.map(s => [s[0], s[1], s[2] * 1.5, 0.75]), [[moon[0], moon[1], 12, 0.6]]);
+  const glow = stars.map(s => [s[0], s[1], s[2]]).concat([[moon[0], moon[1], 11]]);
+  const sinMin = Math.sin(0.05), sinMax = Math.sin(1.5);
+  function spawn(i) {
+    AZ[i] = Math.random() * TAU; EL[i] = Math.asin(rnd(sinMin, sinMax));
+    const c = pick(blues); base[i * 3] = c.r; base[i * 3 + 1] = c.g; base[i * 3 + 2] = c.b;
+    const w = yellows[i % 4]; warm[i * 3] = w.r; warm[i * 3 + 1] = w.g; warm[i * 3 + 2] = w.b;
+    sky.size[i] = rnd(4.5, 8.5); life[i] = rnd(8, 30);
+  }
+  for (let i = 0; i < N; i++) spawn(i);
+  sky.g.attributes.size.needsUpdate = true;
+  const wrap = a => a - TAU * Math.round(a / TAU);
+  function stepSky(dt, t, spd) {
+    const Pp = sky.pos, D = sky.dir;
+    for (let i = 0; i < N; i++) {
+      const az = AZ[i], el = EL[i], ce = Math.cos(el), Y = el * R;
+      let vx = 2.2 + 0.7 * Math.sin(Y * 0.06 + t * 0.2), vy = 1.1 * Math.sin(az * 6 + Y * 0.03 + t * 0.15) * (1 - el / 1.6);
+      for (let k = 0; k < vort.length; k++) {
+        const o = vort[k], dy = (el - o[1]) * R; if (dy > o[2] * 3 || dy < -o[2] * 3) continue;
+        const dx = wrap(az - o[0]) * R * Math.cos((el + o[1]) / 2); if (dx > o[2] * 3 || dx < -o[2] * 3) continue;
+        const f = o[3] * Math.exp(-(dx * dx + dy * dy) / (o[2] * o[2] * 2.2)) * 8 / o[2];
+        vx += (-dy - dx * 0.12) * f; vy += (dx - dy * 0.12) * f;
+      }
+      let w = 0;
+      for (let k = 0; k < glow.length; k++) {
+        const g = glow[k], dy = (el - g[1]) * R; if (dy > g[2] * 4 || dy < -g[2] * 4) continue;
+        const dx = wrap(az - g[0]) * R * ce; w += Math.exp(-(dx * dx + dy * dy) / (g[2] * g[2] * 2));
+      }
+      w = Math.min(w, 1);
+      const j = i * 3;
+      sky.col[j] = base[j] + (warm[j] - base[j]) * w;
+      sky.col[j + 1] = base[j + 1] + (warm[j + 1] - base[j + 1]) * w;
+      sky.col[j + 2] = base[j + 2] + (warm[j + 2] - base[j + 2]) * w;
+      AZ[i] = az + vx * dt * spd / (R * Math.max(ce, 0.2)); EL[i] = el + vy * dt * spd / R; life[i] -= dt * spd;
+      if (EL[i] < 0.04 || EL[i] > 1.52 || life[i] < 0) spawn(i);
+      dome(AZ[i], EL[i], R, tmp); Pp[j] = tmp[0]; Pp[j + 1] = tmp[1]; Pp[j + 2] = tmp[2];
+      // 切线方向 = 东向 * vx + 北向 * vy
+      const a2 = AZ[i], e2 = EL[i], sa = Math.sin(a2), ca = Math.cos(a2), se = Math.sin(e2), c2 = Math.cos(e2);
+      D[j] = ca * vx - se * sa * vy; D[j + 1] = c2 * FL * vy; D[j + 2] = -sa * vx - se * ca * vy;
+    }
+    const a = sky.g.attributes;
+    a.position.needsUpdate = a.col.needsUpdate = a.dir.needsUpdate = true;
+  }
+
+  /* ---------- 山丘网格与笔触 ---------- */
+  {
+    const g = new THREE.PlaneGeometry(380, 380, 190, 190); g.rotateX(-Math.PI / 2); g.translate(CX, 0, CZ);
+    const p = g.attributes.position, cs = [], lo = C('#0c1a44'), hi = C('#2d528f');
+    for (let i = 0; i < p.count; i++) {
+      const x = p.getX(i), z = p.getZ(i), h = hH(x, z); p.setY(i, h);
+      const c = lo.clone().lerp(hi, Math.min(Math.max((h + 3) / 22, 0), 1)); cs.push(c.r, c.g, c.b);
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cs, 3)); g.computeVertexNormals();
+    scene.add(new THREE.Mesh(g, new THREE.MeshLambertMaterial({ vertexColors: true })));
+    const n = small ? 3000 : 7000, hs = strokes(n), hc = ['#1f3d7a', '#2e5a9a', '#3f6f8f', '#16305e', '#3a5f92', '#2d5a6e', '#203a5c', '#132a55'].map(C);
+    for (let i = 0; i < n; i++) {
+      const r = 125 * Math.sqrt(Math.random()), a = Math.random() * TAU, x = CX + r * Math.cos(a), z = CZ + r * Math.sin(a);
+      hs.pos.set([x, hH(x, z) + 0.25, z], i * 3);
+      const c = pick(hc); hs.col.set([c.r, c.g, c.b], i * 3);
+      hs.size[i] = rnd(1.0, 1.8) * (1 + r / 120); hs.dir.set([1, 0, rnd(-0.35, 0.35)], i * 3);
+    }
+    scene.add(hs.mesh);
+  }
+
+
+  /* V6: directional pigment strokes across nearby hills */
+  {
+    const n=small?7500:14000, hs=strokes(n), pal=['#163269','#21447b','#28538b','#38649b','#4b6b89','#132955','#315a75','#6b704f','#8a8050'].map(C);
+    for(let i=0;i<n;i++){
+      const r=9+125*Math.sqrt(Math.random()),a=Math.random()*TAU,x=CX+Math.cos(a)*r,z=CZ+Math.sin(a)*r,j=i*3;
+      hs.pos[j]=x;hs.pos[j+1]=hH(x,z)+.38;hs.pos[j+2]=z;
+      const color=pick(pal);hs.col[j]=color.r;hs.col[j+1]=color.g;hs.col[j+2]=color.b;
+      hs.size[i]=rnd(1.8,4.4);
+      const angle=Math.sin(x*.037+z*.021)*.9+Math.cos(z*.065)*.3;
+      hs.dir[j]=Math.cos(angle)*rnd(.5,2.1);hs.dir[j+1]=.1;hs.dir[j+2]=Math.sin(angle)*1.4;
+    }
+    scene.add(hs.mesh);
+  }
+  /* V6: reusable painted canvas textures for houses */
+  function paintedTexture(base,seed){
+    const c=document.createElement('canvas');c.width=c.height=256;const ctx=c.getContext('2d');
+    ctx.fillStyle=base;ctx.fillRect(0,0,256,256);
+    let state=seed;const rand=()=>((state=(state*1664525+1013904223)>>>0)/4294967296);
+    for(let i=0;i<1500;i++){
+      const x=rand()*256,y=rand()*256,len=3+rand()*21,th=(rand()-.5)*.75;
+      ctx.strokeStyle=i%5===0?'rgba(168,195,218,.22)':i%3===0?'rgba(4,12,42,.24)':'rgba(90,139,190,.19)';
+      ctx.lineWidth=.7+rand()*2.8;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x+Math.cos(th)*len,y+Math.sin(th)*len);ctx.stroke();
+    }
+    const tex=new THREE.CanvasTexture(c);tex.anisotropy=2;return tex;
+  }
+  const paintedWalls=['#253d72','#2b477c','#293a65','#34506f'].map((hex,i)=>new THREE.MeshLambertMaterial({map:paintedTexture(hex,31+i*47)}));
+  const paintedRoofs=['#17294e','#263e70','#253560','#34547a'].map((hex,i)=>new THREE.MeshLambertMaterial({map:paintedTexture(hex,230+i*57)}));
+
+
+  /* ---------- V7: a winding road made of layered, terrain-following painted pigment ---------- */
+  const roadX = z => 9 + 5*Math.sin((z+9)*.049)+4*Math.sin(z*.13);
+  const roadColor = ['#3a4965','#4c5665','#5a625b','#676952','#777356','#526476'].map(C);
+  function paintRoad(width,heightOffset){
+    const verts=[], cols=[];
+    const push=(x,z,c)=>{
+      verts.push(x,hH(x,z)+heightOffset,z);
+      cols.push(c.r,c.g,c.b);
+    };
+    for(let z=-27;z<68;z+=.65){
+      const next=Math.min(68,z+.65);
+      const x1=roadX(z),x2=roadX(next),d1=(roadX(z+.1)-roadX(z-.1))/.2,d2=(roadX(next+.1)-roadX(next-.1))/.2;
+      const norm1=1/Math.hypot(1,d1),norm2=1/Math.hypot(1,d2);
+      const wav=1+.07*Math.sin(z*1.6)+.05*Math.sin(z*3.1);
+      const w=width*wav;
+      const a=[x1-w*norm1,z+w*d1*norm1],b=[x1+w*norm1,z-w*d1*norm1];
+      const c=[x2+w*norm2,next-w*d2*norm2],d=[x2-w*norm2,next+w*d2*norm2];
+      const shade=roadColor[Math.abs(Math.floor(z*1.7))%roadColor.length];
+      push(a[0],a[1],shade);push(b[0],b[1],shade);push(c[0],c[1],shade);
+      push(a[0],a[1],shade);push(c[0],c[1],shade);push(d[0],d[1],shade);
+    }
+    const geo=new THREE.BufferGeometry();
+    geo.setAttribute('position',new THREE.Float32BufferAttribute(verts,3));
+    geo.setAttribute('color',new THREE.Float32BufferAttribute(cols,3));
+    geo.computeVertexNormals();
+    scene.add(new THREE.Mesh(geo,new THREE.MeshLambertMaterial({vertexColors:true,side:THREE.DoubleSide,polygonOffset:true,polygonOffsetFactor:-2})));
+  }
+  paintRoad(3.35,.1);
+  paintRoad(2.45,.15);
+  // Long, partly overlapping ochre and ultramarine strokes guide the eye into the village.
+  {
+    const n=small?2200:4100,rs=strokes(n),colors=['#9c9060','#b9a36a','#68758a','#334c7e','#7e805e','#c1a66c','#3e5b86'].map(C);
+    for(let i=0;i<n;i++){
+      const z=-25+Math.random()*91,edge=(Math.random()-.5)*5.8,x=roadX(z)+edge,j=i*3;
+      rs.pos[j]=x;rs.pos[j+1]=hH(x,z)+.27;rs.pos[j+2]=z;
+      const color=pick(colors);rs.col[j]=color.r;rs.col[j+1]=color.g;rs.col[j+2]=color.b;
+      rs.size[i]=rnd(1.1,2.5);
+      rs.dir[j]=rnd(-.26,.26);rs.dir[j+1]=.15;rs.dir[j+2]=rnd(1.4,4.3);
+    }
+    scene.add(rs.mesh);
+  }
+
+  /* ---------- 村庄（按人的尺度：墙高约人的两倍） ---------- */
+  const lit = [], cols = [];
+  {
+    const wall = [C('#2b3f6e'), C('#33497a'), C('#25365f'), C('#3c4f6b')];
+    const roof = [C('#1a2650'), C('#3d5a8a'), C('#2a3a66'), C('#4b6a8c')];
+    const winMat = new THREE.MeshBasicMaterial({ color: 0xffd75e, fog: false }), doorMat = new THREE.MeshLambertMaterial({ color: 0x3a2a1e });
+    const placed = [];
+    const glowAt = (x, y, z, s) => {
+      const gs = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.45, fog: false }));
+      gs.position.set(x, y, z); gs.scale.setScalar(s); gs.userData.p = Math.random() * 6; scene.add(gs); lit.push(gs);
+    };
+    const house = (x, z, w, h, d) => {
+      const y = hH(x, z) - 0.4;
+      const b = new THREE.Mesh(new THREE.BoxGeometry(w, h + 0.8, d), pick(paintedWalls));
+      b.position.set(x, y + (h + 0.8) / 2, z); scene.add(b); cols.push([x, z, w / 2, d / 2]);
+      const r = new THREE.Mesh(new THREE.ConeGeometry(Math.max(w, d) * 0.74, h * 0.6, 4), pick(paintedRoofs));
+      r.rotation.y = Math.PI / 4; r.position.set(x, y + h + 0.8 + h * 0.3, z); scene.add(r);
+      const front = z + d / 2 + 0.03;
+      const dm = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 1.9), doorMat); dm.position.set(x - w * 0.22, y + 0.8 + 0.95, front); scene.add(dm);
+      if (Math.random() < 0.75) {
+        const wx = x + w * 0.2, wy = y + 0.8 + h * 0.55;
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.75, 0.9), winMat); m.position.set(wx, wy, front); scene.add(m);
+        glowAt(wx, wy, front + 0.3, 3);
+      }
+      if (h > 3.6 && Math.random() < 0.5) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(0.6, 0.7), winMat); m.position.set(x - w * 0.22, y + 0.8 + h * 0.85, front); scene.add(m);
+      }
+    };
+    let tries = 0;
+    while (placed.length < (small ? 22 : 28) && tries++ < 2000) {
+      const x = rnd(-12, 48), z = rnd(-16, 16), w = rnd(3.6, 5.6), d = rnd(3.4, 4.6);
+      if (placed.some(q => Math.abs(q[0] - x) < (q[2] + w) / 2 + 1.2 && Math.abs(q[1] - z) < (q[3] + d) / 2 + 1.2)) continue;
+      if (Math.abs(x - 18) < 6 && Math.abs(z + 1) < 9) continue;
+      if (Math.abs(x - roadX(z)) < w/2 + 4) continue;
+      placed.push([x, z, w, d]); house(x, z, w, rnd(3, 4.4), d);
+    }
+    // 教堂
+    const cx = 18, cz = -2, cy = hH(cx, cz) - 0.4, m = paintedWalls[1];
+    const nave = new THREE.Mesh(new THREE.BoxGeometry(5, 6, 10), m); nave.position.set(cx, cy + 3, cz); scene.add(nave);
+    const nr = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 3.4, 2.6, 4, 1), paintedRoofs[0]);
+    nr.rotation.y = Math.PI / 4; nr.scale.z = 2.1; nr.position.set(cx, cy + 7.3, cz); scene.add(nr);
+    const tower = new THREE.Mesh(new THREE.BoxGeometry(2.6, 12, 2.6), m); tower.position.set(cx, cy + 6, cz + 6.2); scene.add(tower);
+    const spire = new THREE.Mesh(new THREE.ConeGeometry(1.9, 13, 4), paintedRoofs[1]);
+    spire.rotation.y = Math.PI / 4; spire.position.set(cx, cy + 18.5, cz + 6.2); scene.add(spire);
+    cols.push([cx, cz, 2.5, 5], [cx, cz + 6.2, 1.3, 1.3]);
+  }
+
+
+  /* ---------- V7: warm lanterns and slow luminous motes in the village ---------- */
+  const lanternGold = new THREE.MeshBasicMaterial({color:0xffd16a,fog:false});
+  const lanternPost = new THREE.CylinderGeometry(.055,.085,2.7,7);
+  const lanternBulb = new THREE.SphereGeometry(.24,10,8);
+  const lanternDark = new THREE.MeshLambertMaterial({color:0x233455});
+  for(const [i,z] of [35,21,8,-6,-20].entries()){
+    const x=roadX(z)+(i%2===0?4.8:-4.8),y=hH(x,z);
+    const post=new THREE.Mesh(lanternPost,lanternDark);post.position.set(x,y+1.35,z);scene.add(post);
+    const bulb=new THREE.Mesh(lanternBulb,lanternGold);bulb.position.set(x,y+2.76,z);scene.add(bulb);
+    const glow=new THREE.Sprite(new THREE.SpriteMaterial({map:starTex,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.46,fog:false}));
+    glow.position.set(x,y+2.8,z);glow.scale.setScalar(3.8);scene.add(glow);
+    glow.userData.p=i*.8;lit.push(glow);
+  }
+  const motes=[];
+  const moteMat=new THREE.SpriteMaterial({map:starTex,color:0xffcc77,blending:THREE.AdditiveBlending,depthWrite:false,opacity:.32,fog:false});
+  for(let i=0;i<(small?25:48);i++){
+    const x=rnd(-15,45),z=rnd(-20,44),y=hH(x,z)+rnd(1.3,5.3);
+    const mote=new THREE.Sprite(moteMat);
+    mote.position.set(x,y,z);mote.scale.setScalar(rnd(.3,.8));mote.userData={x,y,z,phase:rnd(0,6.283),speed:rnd(.35,.9)};
+    motes.push(mote);scene.add(mote);
+  }
+
+  /* ---------- 柏树：扭曲的火焰形 ---------- */
+  const cyp = new THREE.Group(), CYX = -24, CYZ = 14;
+  {
+    const H = 27; cyp.position.set(CYX, hH(CYX, CYZ) - 0.5, CYZ); scene.add(cyp);
+    const mat = new THREE.MeshLambertMaterial({ color: 0x16261a, side: THREE.DoubleSide });
+    const parts = [[0, 0, 3.3, H, 0], [-1.2, 0.4, 2, H * 0.72, 1.7], [1.3, -0.3, 1.9, H * 0.8, 3.1], [0.3, 1, 1.7, H * 0.92, 4.6], [-0.5, -0.9, 1.6, H * 0.6, 5.9]];
+    const radAt = (p, y) => p[2] * Math.pow(Math.max(1 - y / p[3], 0), 0.8) * (1 + 0.2 * Math.sin(y * 1.0 + p[4]));
+    parts.forEach(p => {
+      const g = new THREE.CylinderGeometry(0, 1, p[3], 16, 30, true); g.translate(0, p[3] / 2, 0);
+      const a = g.attributes.position;
+      for (let i = 0; i < a.count; i++) {
+        const y = a.getY(i), th = Math.atan2(a.getZ(i), a.getX(i)) + y * 0.16, r = radAt(p, y);
+        a.setXYZ(i, p[0] + Math.cos(th) * r + Math.sin(y * 0.3 + p[4]) * 0.45, y, p[1] + Math.sin(th) * r);
+      }
+      g.computeVertexNormals(); cyp.add(new THREE.Mesh(g, mat));
+    });
+    const n = small ? 1400 : 2800, cs = strokes(n), cc = ['#1c3a1e', '#2d4f24', '#4a5d23', '#6b5a2a', '#0f1f12', '#3b6b4a', '#7a6a32', '#24402a'].map(C);
+    for (let i = 0; i < n; i++) {
+      const p = parts[i % parts.length], y = rnd(0, p[3] * 0.97), th = rnd(0, TAU), r = radAt(p, y) * rnd(0.85, 1.05);
+      cs.pos.set([p[0] + Math.cos(th) * r + Math.sin(y * 0.3 + p[4]) * 0.45, y, p[1] + Math.sin(th) * r], i * 3);
+      const c = pick(cc); cs.col.set([c.r, c.g, c.b], i * 3);
+      cs.size[i] = rnd(0.9, 1.6); cs.dir.set([-Math.sin(th) * 0.4 + rnd(-0.2, 0.2), 1, Math.cos(th) * 0.4 + rnd(-0.2, 0.2)], i * 3);
+    }
+    cyp.add(cs.mesh);
+  }
+
+  /* ---------- 漫步者（约 1.8 米高） ---------- */
+  const hero = new THREE.Group(); scene.add(hero);
+  const legs = [], arms = [];
+  {
+    const L = c => new THREE.MeshLambertMaterial({ color: c });
+    const coat = L(0x2c56b0), skin = L(0xe9c49c), straw = L(0xe7c447), dark = L(0x1c2233);
+    const add = (geo, mat, x, y, z, par) => { const m = new THREE.Mesh(geo, mat); m.position.set(x, y, z); (par || hero).add(m); return m; };
+    add(new THREE.CylinderGeometry(0.27, 0.36, 0.82, 12), coat, 0, 1.16, 0);
+    add(new THREE.SphereGeometry(0.2, 16, 12), skin, 0, 1.77, 0);
+    add(new THREE.CylinderGeometry(0.4, 0.4, 0.03, 24), straw, 0, 1.92, 0);
+    add(new THREE.CylinderGeometry(0.16, 0.19, 0.18, 16), straw, 0, 2.01, 0);
+    for (const s of [-1, 1]) {
+      const lp = new THREE.Group(); lp.position.set(s * 0.13, 0.78, 0); hero.add(lp);
+      add(new THREE.BoxGeometry(0.15, 0.78, 0.17), dark, 0, -0.39, 0, lp); legs.push(lp);
+      const ap = new THREE.Group(); ap.position.set(s * 0.35, 1.5, 0); hero.add(ap);
+      add(new THREE.BoxGeometry(0.12, 0.62, 0.14), coat, 0, -0.31, 0, ap); arms.push(ap);
+    }
+    const lamp = add(new THREE.SphereGeometry(0.09, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffd76a }), 0, -0.72, 0.06, arms[1]);
+    lamp.add(new THREE.PointLight(0xffc860, 1.8, 11, 2));
+    const lg = new THREE.Sprite(new THREE.SpriteMaterial({ map: starTex, blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 }));
+    lg.scale.setScalar(1.3); lamp.add(lg);
+  }
+  hero.scale.setScalar(0.88);
+  hero.position.set(10, hH(10, 46), 46);
+  const blocked = (x, z) => Math.hypot(x - CX, z - CZ) > 95 || z < -30 || Math.hypot(x - CYX, z - CYZ) < 3.4 ||
+    cols.some(c => Math.abs(x - c[0]) < c[2] + 0.35 && Math.abs(z - c[1]) < c[3] + 0.35);
+  /* ---------- 视角：触摸/鼠标控制 ---------- */
+  const tgt = new THREE.Vector3();
+  const home = () => ({ yaw: 0, pitch: 0.08, rad: innerWidth < innerHeight ? 9.5 : 8 });
+  let cur = home(), goal = home(), lastTouch = -1e9;
+  const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+  const pts = new Map(); let pinch = 0;
+  const cvs = renderer.domElement, hint = document.getElementById('hint');
+  const touched = () => { lastTouch = performance.now(); hint.classList.add('off'); };
+  cvs.addEventListener('pointerdown', e => { cvs.setPointerCapture(e.pointerId); pts.set(e.pointerId, { x: e.clientX, y: e.clientY }); pinch = 0; touched(); });
+  cvs.addEventListener('pointermove', e => {
+    const p = pts.get(e.pointerId); if (!p) return;
+    if (pts.size === 1) {
+      goal.yaw -= (e.clientX - p.x) * 0.006;
+      goal.pitch = clamp(goal.pitch - (e.clientY - p.y) * 0.004, -0.42, 1.25);
+    }
+    p.x = e.clientX; p.y = e.clientY;
+    if (pts.size === 2) {
+      const [a, b] = [...pts.values()], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (pinch) goal.rad = clamp(goal.rad * pinch / d, 2.5, 90);
+      pinch = d;
+    }
+    touched();
+  });
+  const up = e => { pts.delete(e.pointerId); pinch = 0; };
+  cvs.addEventListener('pointerup', up); cvs.addEventListener('pointercancel', up);
+  cvs.addEventListener('wheel', e => { e.preventDefault(); goal.rad = clamp(goal.rad * (1 + e.deltaY * 0.001), 2.5, 90); touched(); }, { passive: false });
+  document.getElementById('reset').addEventListener('click', () => { goal = home(); goal.yaw = cur.yaw = Math.round(cur.yaw / 6.2832) * 6.2832; });
+  let firstPerson=false,viewMix=0;
+  const viewButton=document.getElementById('view');
+  viewButton.addEventListener('click',()=>{
+    firstPerson=!firstPerson;
+    viewButton.textContent=firstPerson?'♟':'👁';
+    viewButton.setAttribute('aria-label',firstPerson?'切换第三人称漫游':'切换第一人称漫游');
+    touched();
+  });
+  const keys = {};
+  addEventListener('keydown', e => { keys[e.code] = true; if (e.code.startsWith('Arrow')) e.preventDefault(); touched(); });
+  addEventListener('keyup', e => { keys[e.code] = false; });
+  addEventListener('blur', () => { for (const k in keys) keys[k] = false; });
+  const joy = { x: 0, y: 0, id: null }, jb = document.getElementById('joy'), jk = document.getElementById('knob');
+  const joyMove = e => {
+    const r = jb.getBoundingClientRect(), R = r.width / 2, m = R * 0.62;
+    let dx = e.clientX - r.left - R, dy = e.clientY - r.top - R; const d = Math.hypot(dx, dy);
+    if (d > m) { dx *= m / d; dy *= m / d; }
+    joy.x = dx / m; joy.y = dy / m; jk.style.transform = `translate(${dx}px,${dy}px)`;
+  };
+  jb.addEventListener('pointerdown', e => { joy.id = e.pointerId; jb.setPointerCapture(e.pointerId); joyMove(e); touched(); });
+  jb.addEventListener('pointermove', e => { if (e.pointerId === joy.id) joyMove(e); });
+  const joyEnd = e => { if (e.pointerId !== joy.id) return; joy.id = null; joy.x = joy.y = 0; jk.style.transform = ''; };
+  jb.addEventListener('pointerup', joyEnd); jb.addEventListener('pointercancel', joyEnd);
+  let phase = 0;
+  function walk(dt) {
+    const k = c => keys[c] ? 1 : 0;
+    let ix = joy.x + k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
+    let iz = joy.y + k('KeyS') + k('ArrowDown') - k('KeyW') - k('ArrowUp');
+    const n = Math.hypot(ix, iz), mag = Math.min(n, 1), moving = mag > 0.1, p = hero.position;
+    if (moving) {
+      const sp = 3.6 * mag * (keys.ShiftLeft || keys.ShiftRight ? 1.8 : 1), ux = ix / n, uz = iz / n;
+      const sy = Math.sin(cur.yaw), cy = Math.cos(cur.yaw);
+      const dx = (ux * cy + uz * sy) * sp * dt, dz = (-ux * sy + uz * cy) * sp * dt;
+      if (!blocked(p.x + dx, p.z)) p.x += dx;
+      if (!blocked(p.x, p.z + dz)) p.z += dz;
+      let d = Math.atan2(dx, dz) - hero.rotation.y; d = Math.atan2(Math.sin(d), Math.cos(d));
+      hero.rotation.y += d * Math.min(1, dt * 10);
+      phase += sp * dt * 2.3;
+    }
+    const sw = moving ? Math.sin(phase) * 0.7 * mag : 0, e = Math.min(1, dt * 12);
+    legs[0].rotation.x += (sw - legs[0].rotation.x) * e; legs[1].rotation.x += (-sw - legs[1].rotation.x) * e;
+    arms[0].rotation.x += (-sw * 0.8 - arms[0].rotation.x) * e; arms[1].rotation.x += (sw * 0.25 - arms[1].rotation.x) * e;
+    p.y = hH(p.x, p.z) + (moving ? Math.abs(Math.sin(phase)) * 0.06 : 0);
+  }
+  let spd = reduce ? 0.35 : 1, paused = false;
+  const wb = document.getElementById('wind');
+  wb.addEventListener('click', () => { paused = !paused; wb.textContent = paused ? '▶' : '❚❚'; });
+  setTimeout(() => hint.classList.add('off'), 7000);
+
+  function resize() {
+    renderer.setSize(innerWidth, innerHeight);
+    camera.aspect = innerWidth / innerHeight; camera.fov = camera.aspect < 0.8 ? 72 : 55; camera.updateProjectionMatrix();
+    strokeMat.uniforms.uAspect.value = camera.aspect;
+    strokeMat.uniforms.uScale.value = innerHeight * renderer.getPixelRatio() / (2 * Math.tan(THREE.MathUtils.degToRad(camera.fov / 2)));
+  }
+  addEventListener('resize', resize); resize();
+
+  const clock = new THREE.Clock(); let t = 0;
+  const gaze = new THREE.Vector3(), desiredCam = new THREE.Vector3(), eyeCam = new THREE.Vector3();
+  stepSky(0, 0, 0);
+  renderer.setAnimationLoop(() => {
+    const dt = Math.min(clock.getDelta(), 0.05), s = paused ? 0 : spd; t += dt * s;
+    stepSky(dt, t, s);
+    updateMeteor(dt*s);
+    walk(dt);
+    tgt.set(hero.position.x, hero.position.y + 1.35, hero.position.z);
+    const ease = 1-Math.exp(-dt*5.0);
+    cur.yaw += (goal.yaw - cur.yaw) * ease; cur.pitch += (goal.pitch - cur.pitch) * ease; cur.rad += (goal.rad - cur.rad) * ease;
+    desiredCam.set(tgt.x+cur.rad*Math.sin(cur.yaw),tgt.y+2.7,tgt.z+cur.rad*Math.cos(cur.yaw));
+    const gh=hH(desiredCam.x,desiredCam.z)+.7;
+    if(desiredCam.y<gh)desiredCam.y=gh;
+    eyeCam.set(hero.position.x,hero.position.y+1.7,hero.position.z);
+    viewMix+=(Number(firstPerson)-viewMix)*(1-Math.exp(-dt*7));
+    camera.position.copy(desiredCam).lerp(eyeCam,viewMix);
+    hero.visible=viewMix<.77;
+    gaze.set(camera.position.x-Math.sin(cur.yaw)*30,camera.position.y+Math.tan(cur.pitch)*30,camera.position.z-Math.cos(cur.yaw)*30);
+    camera.lookAt(gaze);
+    sprites.forEach((sp, i) => sp.scale.setScalar(sp.userData.b * (1 + 0.07 * Math.sin(t * 1.6 + i * 1.3))));
+    lit.forEach(g => g.material.opacity = 0.42 + 0.12 * Math.sin(t * 2.3 + g.userData.p));
+    cyp.rotation.z = 0.018 * Math.sin(t * 0.6);
+    for(const mote of motes){
+      const d=mote.userData;
+      mote.position.set(d.x+Math.sin(t*d.speed+d.phase)*.38,d.y+Math.sin(t*d.speed*1.4+d.phase)*.3,d.z+Math.cos(t*d.speed+d.phase)*.38);
+    }
+    twinkle[0].material.opacity = 0.55 + 0.35 * Math.sin(t * 1.9); twinkle[1].material.opacity = 0.55 + 0.35 * Math.cos(t * 1.4);
+    renderer.render(scene, camera);
+  });
+}
+}
+</script>
+</body>
+</html>
