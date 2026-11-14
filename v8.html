@@ -565,10 +565,29 @@ function updateMeteor(dt){
   const up = e => { pts.delete(e.pointerId); pinch = 0; };
   cvs.addEventListener('pointerup', up); cvs.addEventListener('pointercancel', up);
   cvs.addEventListener('wheel', e => { e.preventDefault(); goal.rad = clamp(goal.rad * (1 + e.deltaY * 0.001), 2.5, 90); touched(); }, { passive: false });
-  document.getElementById('reset').addEventListener('click', () => { goal = home(); goal.yaw = cur.yaw = Math.round(cur.yaw / 6.2832) * 6.2832; });
+  document.getElementById('reset').addEventListener('click', () => { if(paintingMode)document.getElementById('painting').click();goal = home(); goal.yaw = cur.yaw = Math.round(cur.yaw / 6.2832) * 6.2832; });
   let firstPerson=false,viewMix=0;
+  let paintingMode=false,paintingBlend=0;
   const viewButton=document.getElementById('view');
+  const paintingButton=document.getElementById('painting');
+  const paintingNote=document.getElementById('paintingNote');
+  const paintingCamera=new THREE.Vector3(-3,hH(-3,76)+8.8,76);
+  const paintingLook=new THREE.Vector3(3,30,-48);
+  paintingButton.addEventListener('click',()=>{
+    paintingMode=!paintingMode;
+    paintingButton.setAttribute('aria-pressed',String(paintingMode));
+    paintingButton.textContent=paintingMode?'走':'画';
+    paintingButton.setAttribute('aria-label',paintingMode?'返回自由漫游':'进入原画视角');
+    paintingNote.classList.toggle('show',paintingMode);
+    if(paintingMode){
+      firstPerson=false;
+      viewButton.textContent='👁';
+      viewButton.setAttribute('aria-label','切换第一人称漫游');
+    }
+    touched();
+  });
   viewButton.addEventListener('click',()=>{
+    if(paintingMode)paintingButton.click();
     firstPerson=!firstPerson;
     viewButton.textContent=firstPerson?'♟':'👁';
     viewButton.setAttribute('aria-label',firstPerson?'切换第三人称漫游':'切换第一人称漫游');
@@ -591,6 +610,7 @@ function updateMeteor(dt){
   jb.addEventListener('pointerup', joyEnd); jb.addEventListener('pointercancel', joyEnd);
   let phase = 0;
   function walk(dt) {
+    if(paintingMode)return;
     const k = c => keys[c] ? 1 : 0;
     let ix = joy.x + k('KeyD') + k('ArrowRight') - k('KeyA') - k('ArrowLeft');
     let iz = joy.y + k('KeyS') + k('ArrowDown') - k('KeyW') - k('ArrowUp');
@@ -642,6 +662,11 @@ function updateMeteor(dt){
     camera.position.copy(desiredCam).lerp(eyeCam,viewMix);
     hero.visible=!firstPerson && viewMix<.7;
     gaze.set(camera.position.x-Math.sin(cur.yaw)*30,camera.position.y+Math.tan(cur.pitch)*30,camera.position.z-Math.cos(cur.yaw)*30);
+    paintingBlend+=(Number(paintingMode)-paintingBlend)*(1-Math.exp(-dt*2.4));
+    if(paintingBlend>.0005){
+      camera.position.lerp(paintingCamera,paintingBlend);
+      gaze.lerp(paintingLook,paintingBlend);
+    }
     camera.lookAt(gaze);
     sprites.forEach((sp, i) => sp.scale.setScalar(sp.userData.b * (1 + 0.07 * Math.sin(t * 1.6 + i * 1.3))));
     lit.forEach(g => g.material.opacity = 0.42 + 0.12 * Math.sin(t * 2.3 + g.userData.p));
