@@ -646,18 +646,56 @@ function updateMeteor(dt){
         house(x,z,w,h,d,houseIndex++);
       }
     }
-    // 教堂
-    const cx = 18, cz = -2, cy = hH(cx, cz) - 0.4, m = paintedWalls[1];
-    const nave = new THREE.Mesh(new THREE.BoxGeometry(5, 6, 10), m); nave.position.set(cx, cy + 3, cz); scene.add(nave);
-    const nr = new THREE.Mesh(new THREE.CylinderGeometry(0.01, 3.4, 2.6, 4, 1), paintedRoofs[0]);
-    nr.rotation.y = Math.PI / 4; nr.scale.z = 2.1; nr.position.set(cx, cy + 7.3, cz); scene.add(nr);
-    const tower = new THREE.Mesh(new THREE.BoxGeometry(2.4, 14, 2.4), m);
-    tower.position.set(cx,cy+7,cz+6.2);scene.add(tower);
-    const spire = new THREE.Mesh(new THREE.ConeGeometry(1.65, 15, 4), paintedRoofs[1]);
-    spire.rotation.y=Math.PI/4;spire.position.set(cx,cy+21.5,cz+6.2);scene.add(spire);
-    cols.push([cx, cz, 2.5, 5], [cx, cz + 6.2, 1.3, 1.3]);
-    pigmentHouse(cx,cy,cz,5,5,10);
-    pigmentHouse(cx,cy,cz+6.2,2.4,13,2.4);
+    // V8.3: austere Dutch-inspired church, a single tall marker among low rooftops.
+    // Keep its luminous blue-grey walls, quiet lancet openings and slender silhouette.
+    const cx=18,cz=-2,cy=hH(18,-2)-.4;
+    const churchStone=new THREE.MeshLambertMaterial({
+      map:paintedTexture('#667f99',809),emissive:0x263f5b,emissiveIntensity:.14
+    });
+    const nave=new THREE.Mesh(wobbleWalls(5,6,10),churchStone);
+    nave.position.set(cx,cy+3,cz);scene.add(nave);
+    const naveRoof=new THREE.Mesh(gableRoof(5,10,2.8),paintedRoofs[1]);
+    naveRoof.position.set(cx,cy+6,cz);scene.add(naveRoof);
+    roofHatching(cx,cy+6,cz,5,10,2.8,0);
+    const tower=new THREE.Mesh(wobbleWalls(2.5,14.5,2.5),churchStone);
+    tower.position.set(cx,cy+7.25,cz+6.2);scene.add(tower);
+    const cornice=new THREE.Mesh(new THREE.BoxGeometry(3.1,.43,3.1),
+      new THREE.MeshLambertMaterial({color:0x5f7596}));
+    cornice.position.set(cx,cy+14.7,cz+6.2);scene.add(cornice);
+    // Four dark lancets, subtle rather than bright modern windows.
+    const lancetMat=new THREE.MeshBasicMaterial({color:0x172a49});
+    const lancetShape=new THREE.Shape();
+    lancetShape.moveTo(-.37,0);lancetShape.lineTo(.37,0);
+    lancetShape.lineTo(.37,1.22);lancetShape.lineTo(0,1.88);
+    lancetShape.lineTo(-.37,1.22);lancetShape.closePath();
+    const lancetGeo=new THREE.ShapeGeometry(lancetShape);
+    const frontLancet=new THREE.Mesh(lancetGeo,lancetMat);
+    frontLancet.position.set(cx,cy+10.8,cz+7.52);scene.add(frontLancet);
+    const backLancet=new THREE.Mesh(lancetGeo,new THREE.MeshBasicMaterial({
+      color:0x152847,side:THREE.DoubleSide
+    }));
+    backLancet.rotation.y=Math.PI;
+    backLancet.position.set(cx,cy+10.8,cz+4.88);scene.add(backLancet);
+    const sideLancet=new THREE.Mesh(lancetGeo,lancetMat);
+    sideLancet.rotation.y=Math.PI/2;
+    sideLancet.position.set(cx+1.28,cy+10.8,cz+6.2);scene.add(sideLancet);
+    const spire=new THREE.Mesh(new THREE.ConeGeometry(1.65,15.7,4),
+      paintedRoofs[0]);
+    spire.rotation.y=Math.PI/4;
+    spire.position.set(cx,cy+22.95,cz+6.2);scene.add(spire);
+    // Uneven light catching the tower edges creates a painterly rather than CAD contour.
+    const edgeMat=new THREE.MeshBasicMaterial({color:0x7b90aa});
+    for(const offset of [-1.02,1.02]){
+      const trim=new THREE.Mesh(new THREE.PlaneGeometry(.13,10.7),edgeMat);
+      trim.position.set(cx+offset,cy+7.3,cz+7.47);
+      trim.rotation.z=offset*.024;scene.add(trim);
+    }
+    const entrance=new THREE.Mesh(new THREE.PlaneGeometry(1.05,2.15),
+      new THREE.MeshBasicMaterial({color:0x172840}));
+    entrance.position.set(cx,cy+1.25,cz+7.49);scene.add(entrance);
+    cols.push([cx,cz,2.7,5.2],[cx,cz+6.2,1.35,1.35]);
+    pigmentHouse(cx,cy,cz,5,5.7,10);
+    pigmentHouse(cx,cy,cz+6.2,2.5,14,2.5);
     finishPigment();
     finishRoofHatching();
   }
