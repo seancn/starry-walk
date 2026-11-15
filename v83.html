@@ -529,10 +529,11 @@ function updateMeteor(dt){
       roofPigmentPositions.push(px,py,pz);
       roofPigmentRGB.push(color.r,color.g,color.b);
     };
-    function roofHatching(hx,hy,hz,w,d,rise,orient){
+    function roofHatching(hx,hy,hz,w,d,rise,orient,peakX=0){
       const hw=w*.54,hd=d*.55,rotated=Math.abs(orient)>.1;
       const pos=(u,v)=>{
-        const y=hy+rise*(1-Math.abs(u)/hw)+.045;
+        const slope=u<peakX?(u+hw)/(peakX+hw):(hw-u)/(hw-peakX);
+        const y=hy+rise*Math.max(0,slope)+.045;
         return rotated?[hx+v,y,hz-u]:[hx+u,y,hz+v];
       };
       for(let k=0;k<(small?32:52);k++){
@@ -578,6 +579,7 @@ function updateMeteor(dt){
       roof.setAttribute('position',new THREE.Float32BufferAttribute(v,3));
       roof.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
       roof.computeVertexNormals();
+      roof.userData={peakX};
       return roof;
     }
     function wobbleWalls(w,h,d){
@@ -610,7 +612,7 @@ function updateMeteor(dt){
       roof.position.set(x,y+h+.8,z);
       roof.rotation.y=turned?Math.PI/2:0;
       scene.add(roof);
-      roofHatching(x,y+h+.8,z,roofW,roofD,rise,roof.rotation.y);
+      roofHatching(x,y+h+.8,z,roofW,roofD,rise,roof.rotation.y,roof.geometry.userData.peakX);
       // Opaque, quiet walls; relatively few windows glow in this sleeping village.
       const front=z+d/2+.16;
       if(index%4!==1){
@@ -656,7 +658,7 @@ function updateMeteor(dt){
     nave.position.set(cx,cy+3,cz);scene.add(nave);
     const naveRoof=new THREE.Mesh(gableRoof(5,10,2.8),paintedRoofs[1]);
     naveRoof.position.set(cx,cy+6,cz);scene.add(naveRoof);
-    roofHatching(cx,cy+6,cz,5,10,2.8,0);
+    roofHatching(cx,cy+6,cz,5,10,2.8,0,naveRoof.geometry.userData.peakX);
     const tower=new THREE.Mesh(wobbleWalls(2.5,14.5,2.5),churchStone);
     tower.position.set(cx,cy+7.25,cz+6.2);scene.add(tower);
     const cornice=new THREE.Mesh(new THREE.BoxGeometry(3.1,.43,3.1),
