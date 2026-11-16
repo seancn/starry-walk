@@ -904,22 +904,39 @@ function updateMeteor(dt){
       ['#c2aa74','#a99165','#87764d','#a89675','#74705d','#b39a6c'],
       (y,a)=>{const r=y>2.025?.222:.375;return [r*Math.cos(a),y,r*Math.sin(a)]},
       1.989,2.16,.013,.038);
+    // Rounded sleeve and trouser profiles: smooth fabric volume rather than straight polygons.
+    const sleeveGeo=new THREE.LatheGeometry([
+      new THREE.Vector2(.105,-.68),new THREE.Vector2(.123,-.60),
+      new THREE.Vector2(.141,-.43),new THREE.Vector2(.165,-.20),
+      new THREE.Vector2(.159,-.065),new THREE.Vector2(.139,.01)
+    ],32);
+    const trouserGeo=new THREE.LatheGeometry([
+      new THREE.Vector2(.108,-.715),new THREE.Vector2(.117,-.64),
+      new THREE.Vector2(.129,-.43),new THREE.Vector2(.136,-.24),
+      new THREE.Vector2(.136,-.07),new THREE.Vector2(.121,.012)
+    ],30);
+    const shoeGeo=new THREE.SphereGeometry(1,28,18);
     for(const side of [-1,1]){
       const lp=new THREE.Group();lp.position.set(side*.168,.78,0);hero.add(lp);
-      add(new THREE.CylinderGeometry(.135,.107,.71,9),trouser,0,-.37,0,lp);
-      add(new THREE.BoxGeometry(.19,.14,.34),boots,0,-.72,-.057,lp);
-      pigment(lp,small?100:170,
+      add(trouserGeo,trouser,0,0,0,lp);
+      const shoe=add(shoeGeo,boots,0,-.692,-.072,lp);
+      shoe.scale.set(.144,.095,.232);
+      pigment(lp,small?125:220,
         ['#3e5275','#24395c','#66768b','#334564','#74727b'],
         (y,a)=>[Math.cos(a)*.142,y-.365,Math.sin(a)*.117],
         -.23,.24,.02,.09);
+      lp.rotation.z=side*.025;
       legs.push(lp);
       const ap=new THREE.Group();ap.position.set(side*.33,1.48,0);hero.add(ap);
       ap.rotation.z=side*.08;
-      const sleeve=add(new THREE.CylinderGeometry(.16,.124,.66,12),side===1?coatShade:coat,0,-.33,0,ap);
-      sleeve.rotation.z=side*-.06;
-      add(new THREE.SphereGeometry(.105,9,7),skin,0,-.685,-.015,ap);
-      pigment(ap,small?95:165,
-        ['#6685a4','#385782','#7d8da0','#263e67','#597497','#aca080'],
+      const shoulder=add(new THREE.SphereGeometry(.168,22,16),side===1?coatShade:coat,0,-.105,0,ap);
+      shoulder.scale.set(.95,.78,.92);
+      const sleeve=add(sleeveGeo,side===1?coatShade:coat,0,0,0,ap);
+      sleeve.rotation.z=side*-.045;
+      const hand=add(new THREE.SphereGeometry(.103,20,14),skin,0,-.682,-.017,ap);
+      hand.scale.set(.94,1,.92);
+      pigment(ap,small?125:215,
+        ['#617b9b','#405e83','#7889a0','#32496f','#5a7595','#8b8b87'],
         (y,a)=>[Math.cos(a)*.154,y-.33,Math.sin(a)*.138],
         -.25,.25,.025,.085);
       arms.push(ap);
